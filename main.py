@@ -15,19 +15,21 @@ import io
 import queue
 import time
 
-# Initialize Pygame
+# Inicializa a instância do Pygame
 pygame.init()
 
-# Set up the display
+# Seta o tamanho do display, no meu caso estou usando uma tela de 1920x1080, todavia cortei um pouco dada a qualidade da câmera.
 screen = pygame.display.set_mode((1680, 720))
 pygame.display.set_caption("Teleoperacao do Robo + Imagem da Camera")
 
-# Define button properties
+# Defino as propriedades dos botões, cor, tamanho, texto, etc.
 button_color = (50, 50, 50)
 button_hover_color = (100, 100, 100)
 button_text_color = (255, 255, 255)
 button_font = pygame.font.Font(None, 36)
 
+
+# Defino o local e tamanho de cada um dos botões
 button_rects = {
     "kill": pygame.Rect(10, 10, 150, 50),
     "forward": pygame.Rect(910, 500, 150, 50),
@@ -37,6 +39,7 @@ button_rects = {
     "stop": pygame.Rect(910, 575, 150, 50),
 }
 
+# Seto um texto a cada botão
 button_labels = {
     "kill": "Emergência",
     "forward": "Frente",
@@ -46,7 +49,7 @@ button_labels = {
     "stop": " ",
 }
 
-# Function to draw buttons
+# Funcao para dar display dos botões na tela
 def draw_buttons():
     for label, rect in button_rects.items():
         pygame.draw.rect(screen, button_color, rect, border_radius=10)
@@ -54,10 +57,10 @@ def draw_buttons():
         text_rect = text_surf.get_rect(center=rect.center)
         screen.blit(text_surf, text_rect)
 
-# Create a queue to manage UI updates
-ui_queue = queue.Queue(maxsize=10)  # Small maximum size to avoid high latency
+# Crio uma fila para armazenar as imagens e latências
+ui_queue = queue.Queue(maxsize=10)  # Quanto maior o maxsize, mais sujeito a latências altas estará
 
-# Class that controls the robot
+# Classe de controle do robô
 class RobotController(Node):
     def __init__(self):
         super().__init__('robot_controller')
@@ -76,6 +79,7 @@ class RobotController(Node):
         self.front_clear = True
         self.back_clear = True
 
+    # Funcao de callback do LiDAR, para implementar o sistema de segurança
     def lidar_callback(self, msg):
         num_ranges = len(msg.ranges)
         sector_size = num_ranges // 12
@@ -96,6 +100,7 @@ class RobotController(Node):
         elif not self.back_clear and self.linear_speed < 0:
             self.stop_robot()
 
+    # Funcões para controlar o robô
     def move_robot(self):
         msg = Twist()
         msg.linear.x = self.linear_speed
@@ -131,6 +136,7 @@ class RobotController(Node):
         self.angular_speed = -0.1
         self.move_robot()
 
+    # Função para enviar um sinal de emergência ao robô
     def send_emergency_stop(self):
         if self.emergency_client.wait_for_service(timeout_sec=1.0):
             req = Empty.Request()
@@ -152,6 +158,7 @@ class RobotController(Node):
         self.send_emergency_stop()
         rclpy.shutdown()
 
+# Classe para ouvir a câmera
 class Listener(Node):
     def __init__(self):
         super().__init__('listener')
@@ -162,11 +169,12 @@ class Listener(Node):
             10)
         self.subscription
 
+    # Função de callback para receber a imagem da câmera e a latência
     def listener_callback(self, msg):
         timestamp, jpg_as_text = msg.data.split('|', 1)
         timestamp = float(timestamp)
         current_time = time.time()
-        latency = (current_time - timestamp) * 1000  # Convert to milliseconds
+        latency = (current_time - timestamp) * 1000  # Converto para milisegundos
 
         jpg_original = base64.b64decode(jpg_as_text)
         jpg_as_np = np.frombuffer(jpg_original, dtype=np.uint8)
@@ -180,10 +188,11 @@ class Listener(Node):
             img_bytes.seek(0)
             if not ui_queue.full():
                 ui_queue.put((img_bytes, latency))
-                latencies.append(latency)  # Store the latency
+                latencies.append(latency)
         else:
             self.get_logger().error('Could not decode the image')
 
+# Função para inicializar os nós do ROS
 def init_ros_nodes():
     rclpy.init()
     robot_controller = RobotController()
@@ -194,6 +203,7 @@ def init_ros_nodes():
 
     return robot_controller, listener
 
+# Função para rodar os nós do ROS2 toda hora
 def spin_nodes(robot_controller, listener):
     while rclpy.ok():
         rclpy.spin_once(robot_controller, timeout_sec=0.01)
@@ -204,6 +214,7 @@ robot_controller, listener = init_ros_nodes()
 
 latencies = []
 
+# Função para calcular a média móvel das latências
 def moving_average(latency_list, window_size=10):
     if len(latency_list) < window_size:
         return sum(latency_list) / len(latency_list)
@@ -215,9 +226,9 @@ def main():
     running = True
     clock = pygame.time.Clock()
 
-    # Font setup
     font = pygame.font.Font(None, 36)
     
+    # Loop principal do Pygame para pegar as teclas e movimentar o robô, além de atualizar o frame da imagem
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -265,12 +276,11 @@ def main():
             img_surface = pygame.surfarray.make_surface(img_np)
             screen.blit(img_surface, (0, 0))
 
-            # Display latency text
             avg_latency = moving_average(latencies)
             latency_text = font.render(f"Latência Média: {avg_latency:.2f} ms", True, (255, 255, 255))
-            screen.blit(latency_text, (1300, 10))  # Adjust position as needed
+            screen.blit(latency_text, (1300, 10))  
 
-        # Display linear and angular speeds
+        
         linear_speed_text = font.render(f"Vel. Linear: {robot_controller.linear_speed:.2f} m/s", True, (255, 255, 255))
         angular_speed_text = font.render(f"Vel. Angular: {robot_controller.angular_speed:.2f} rad/s", True, (255, 255, 255))
         screen.blit(linear_speed_text, (1300, 50))
