@@ -165,7 +165,7 @@ O feed da câmera é exibido na tela do Pygame. A latência do feed é calculada
 
 ## Vídeo de funcionamento
 
-Também foi disponível um vídeo para exemplificar o funcionamento do robô. O mesmo pode ser acessado [aqui]()
+Também foi disponível um vídeo para exemplificar o funcionamento do robô. O mesmo pode ser acessado [aqui](IMG_1110.MOV)
 
 ## Observações
 
